@@ -1,4 +1,14 @@
-#code to add two numbers
-x=int(input("input the first number"))
-y=int(input("input the second number"))
-print(x+y)
+def get_number(prompt):
+    while True:
+        try:
+            return int(input(prompt))
+        except ValueError:
+            print("Invalid input. Please enter a valid integer.")
+
+def main():
+    x = get_number("Input the first number: ")
+    y = get_number("Input the second number: ")
+    print(f"The sum is: {x + y}")
+
+if __name__ == "__main__":
+    main()
