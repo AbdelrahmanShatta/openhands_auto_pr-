@@ -80,29 +80,7 @@ jobs:
             echo '```' >> quality_report.md
           } || true
 
-      - name: Create OpenHands instructions
-        run: |
-          cat > .openhands_instructions << 'EOL'
-          # OpenHands Code Quality Review Instructions
-
-          **Role:** You are a senior code quality analyst responsible for evaluating pull requests.
-
-          **Task:** Review the code changes and quality check results to determine if the PR meets our standards.
-
-          **Code Quality Standards:**
-          1. Code follows consistent naming conventions and style guidelines
-          2. No code smells or anti-patterns are present
-          3. Functions and classes are well-documented with clear purpose
-          4. Code is DRY (Don't Repeat Yourself) and follows SOLID principles
-          5. All automated quality checks (Black, Ruff, MyPy) must pass
-          6. No security vulnerabilities or performance bottlenecks
-          7. Tests are present for new functionality (if applicable)
-
-          **Response Format:**
-          - Output exactly "GOOD" if the code meets ALL standards
-          - Output exactly "BAD" if ANY standard is not met
-          DO NOT provide explanations or suggestions - only output GOOD or BAD
-          EOL
+      # Note: .openhands_instructions file should exist in the repository root
 
       - name: Run OpenHands Review
         id: openhands_review
@@ -113,6 +91,13 @@ jobs:
           LLM_MODEL: "claude-3-5-sonnet-20241022"
           LOG_ALL_EVENTS: "true"
         run: |
+          # Verify .openhands_instructions exists
+          if [ ! -f ".openhands_instructions" ]; then
+            echo "Error: .openhands_instructions file not found in repository"
+            exit 1
+          fi
+          
+          # Run OpenHands review and save output
           review_output=$(python -m openhands.core.main \
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
             --eval-output-dir ./eval_output \
@@ -121,6 +106,10 @@ jobs:
             -b 50 \
             --eval-n-limit 50)
           
+          # Save the output for debugging
+          echo "$review_output" > openhands_output.txt
+          
+          # Check for GOOD in the output
           if echo "$review_output" | grep -q "GOOD"; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
@@ -170,7 +159,12 @@ jobs:
 
             While automated checks passed, OpenHands AI review found quality issues. Please review your code for potential improvements.
 
-            $QUALITY_REPORT"
+            $QUALITY_REPORT
+
+            OpenHands Review Output:
+            \`\`\`
+            $(cat openhands_output.txt || echo "No output available")
+            \`\`\`"
             
             gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review."
           fi
