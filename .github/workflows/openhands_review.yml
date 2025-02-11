@@ -109,8 +109,11 @@ jobs:
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
           
-          # Check for GOOD in the output
-          if echo "$review_output" | grep -q "GOOD"; then
+          # Extract just the GOOD/BAD from the output
+          result=$(echo "$review_output" | grep -o "GOOD\|BAD" || echo "BAD")
+          echo "OpenHands result: $result"
+          
+          if [ "$result" = "GOOD" ]; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
@@ -142,12 +145,20 @@ jobs:
           fi
           
           # If we get here, all automated checks passed, now check OpenHands result
-          if [ "$OPENHANDS_PASSED" = "true" ]; then
+          OPENHANDS_RESULT=$(cat openhands_output.txt | grep -o "GOOD\|BAD" || echo "BAD")
+          echo "Final OpenHands result: $OPENHANDS_RESULT"
+          
+          if [ "$OPENHANDS_RESULT" = "GOOD" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **Code Quality Review Passed**
 
             All automated checks and OpenHands review passed. Auto-merging PR.
 
-            $QUALITY_REPORT"
+            $QUALITY_REPORT
+
+            OpenHands Review Output:
+            \`\`\`
+            $(cat openhands_output.txt || echo "No output available")
+            \`\`\`"
             
             gh pr review "${{ github.event.pull_request.number }}" --approve -b "All code quality standards met."
             
@@ -167,4 +178,5 @@ jobs:
             \`\`\`"
             
             gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review."
+            exit 1
           fi
