@@ -106,33 +106,23 @@ jobs:
 
       - name: Run OpenHands Review
         id: openhands_review
+        if: env.BLACK_PASSED == 'true' && env.RUFF_PASSED == 'true' && env.MYPY_PASSED == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_MODEL: "claude-3-5-sonnet-20241022"
           LOG_ALL_EVENTS: "true"
         run: |
-          # Get the quality check results
-          CHECKS_PASSED=true
-          if [ "$BLACK_PASSED" = "false" ] || [ "$RUFF_PASSED" = "false" ] || [ "$MYPY_PASSED" = "false" ]; then
-            CHECKS_PASSED=false
-          fi
+          review_output=$(python -m openhands.core.main \
+            -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
+            --eval-output-dir ./eval_output \
+            --no-auto-continue \
+            -i 50 \
+            -b 50 \
+            --eval-n-limit 50)
           
-          if [ "$CHECKS_PASSED" = "true" ]; then
-            # Only run OpenHands review if automated checks pass
-            review_output=$(python -m openhands.core.main \
-              -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
-              --eval-output-dir ./eval_output \
-              --no-auto-continue \
-              -i 50 \
-              -b 50 \
-              --eval-n-limit 50)
-            
-            if echo "$review_output" | grep -q "GOOD"; then
-              echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
-            else
-              echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
-            fi
+          if echo "$review_output" | grep -q "GOOD"; then
+            echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
           fi
@@ -144,8 +134,26 @@ jobs:
           # Read the quality report
           QUALITY_REPORT=$(cat quality_report.md)
           
-          if [ "$BLACK_PASSED" = "true" ] && [ "$RUFF_PASSED" = "true" ] && [ "$MYPY_PASSED" = "true" ] && [ "$OPENHANDS_PASSED" = "true" ]; then
-            # All checks passed - approve and auto-merge
+          # Check if all automated checks passed
+          CHECKS_PASSED="true"
+          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
+            CHECKS_PASSED="false"
+          fi
+          
+          # If automated checks failed, don't consider OpenHands result
+          if [ "$CHECKS_PASSED" = "false" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
+
+            Automated quality checks did not pass. Please review the report below and make necessary changes.
+
+            $QUALITY_REPORT"
+            
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met. See the detailed report in the PR comments."
+            exit 0
+          fi
+          
+          # If we get here, all automated checks passed, now check OpenHands result
+          if [ "$OPENHANDS_PASSED" = "true" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **Code Quality Review Passed**
 
             All automated checks and OpenHands review passed. Auto-merging PR.
@@ -158,12 +166,11 @@ jobs:
             gh pr merge "${{ github.event.pull_request.number }}" --auto --merge
             gh pr merge "${{ github.event.pull_request.number }}" --merge
           else
-            # Some checks failed - request changes
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
 
-            Some quality checks did not pass. Please review the report below and make necessary changes.
+            While automated checks passed, OpenHands AI review found quality issues. Please review your code for potential improvements.
 
             $QUALITY_REPORT"
             
-            gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met. See the detailed report in the PR comments."
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review."
           fi
