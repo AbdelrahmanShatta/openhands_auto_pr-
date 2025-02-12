@@ -17,3 +17,4 @@
 - Output exactly "GOOD" if the code meets ALL standards
 - Output exactly "BAD" if ANY standard is not met
 DO NOT provide explanations or suggestions - only output GOOD or BAD
+NEVER ASK THE USER FOR ANY INPUT
