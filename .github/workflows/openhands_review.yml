@@ -103,7 +103,7 @@ jobs:
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
             --eval-output-dir ./eval_output \
             -i 50 \
-            -b 50 \   
+            -b 50 2>&1)
 
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
