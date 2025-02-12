@@ -97,16 +97,14 @@ jobs:
             exit 1
           fi
           
-          # Run OpenHands review and save output
-          # Use timeout to prevent hanging and redirect stderr to stdout to capture everything
-          review_output=$(timeout 300s python -m openhands.core.main \
+          # Run OpenHands review in headless mode
+          review_output=$(python -m openhands.core.main \
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
             --eval-output-dir ./eval_output \
-            --no-auto-continue \
-            --no-interactive \
             -i 50 \
             -b 50 \
-            --eval-n-limit 50 2>&1 || true)
+            --eval-n-limit 50 \
+            --eval-num-workers 1 2>&1 || true)
           
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
