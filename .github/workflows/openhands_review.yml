@@ -98,6 +98,8 @@ jobs:
           fi
           
           # Run OpenHands review and save output
+          echo "before openhands"
+
           review_output=$(python -m openhands.core.main \
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
             --eval-output-dir ./eval_output \
