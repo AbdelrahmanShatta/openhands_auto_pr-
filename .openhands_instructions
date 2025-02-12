@@ -18,6 +18,7 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT add any whitespace
 5. DO NOT add any line breaks
 6. DO NOT say "I will output" or similar phrases
+7. DO NOT ask for user input
 
 YOUR ENTIRE RESPONSE MUST BE EXACTLY ONE OF THESE TWO OPTIONS:
 GOOD
@@ -28,3 +29,4 @@ GOOD
 
 Example correct response if any standard fails:
 BAD
+NEVER ASK FOR USRE INPUT
