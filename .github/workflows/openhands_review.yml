@@ -105,14 +105,14 @@ jobs:
             -i 50 \
             -b 50 \
             --eval-n-limit 50)
-          
+          echo "hi"
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
-          
+          echo "hiiii"
           # Extract just the GOOD/BAD from the output
           result=$(echo "$review_output" | grep -o "GOOD\|BAD" || echo "BAD")
           echo "OpenHands result: $result"
-          
+          echo "Helloooooooooo"
           if [ "$result" = "GOOD" ]; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
