@@ -110,20 +110,7 @@ jobs:
           echo "$review_output" > openhands_output.txt
           
           # Extract just the GOOD/BAD from the output
-          # Look for GOOD/BAD at the end of a line or as a single word
-          result=$(echo "$review_output" | grep -o "\(GOOD\|BAD\)$\|\(GOOD\|BAD\)[^A-Za-z]" | head -n1 | tr -d '\n' | tr -d ' ')
-          
-          # If no match found, try to extract from the thought text
-          if [ -z "$result" ]; then
-            if echo "$review_output" | grep -q "I will output: GOOD"; then
-              result="GOOD"
-            elif echo "$review_output" | grep -q "I will output: BAD"; then
-              result="BAD"
-            else
-              result="BAD"
-            fi
-          fi
-          
+          result=$(echo "$review_output" | grep -o "GOOD\|BAD" || echo "BAD")
           echo "OpenHands result: $result"
           
           if [ "$result" = "GOOD" ]; then
@@ -158,14 +145,7 @@ jobs:
           fi
           
           # If we get here, all automated checks passed, now check OpenHands result
-          # Extract the result from the thought text
-          if cat openhands_output.txt | grep -q "I will output: GOOD"; then
-            OPENHANDS_RESULT="GOOD"
-          elif cat openhands_output.txt | grep -q "I will output: BAD"; then
-            OPENHANDS_RESULT="BAD"
-          else
-            OPENHANDS_RESULT="BAD"
-          fi
+          OPENHANDS_RESULT=$(cat openhands_output.txt | grep -o "GOOD\|BAD" || echo "BAD")
           echo "Final OpenHands result: $OPENHANDS_RESULT"
           
           if [ "$OPENHANDS_RESULT" = "GOOD" ]; then
