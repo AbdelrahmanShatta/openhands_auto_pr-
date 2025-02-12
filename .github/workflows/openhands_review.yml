@@ -104,8 +104,7 @@ jobs:
             --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \   
-            --eval-n-limit 50 \
-            --eval-n-limit 50 2>&1 || true) 
+
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
           
