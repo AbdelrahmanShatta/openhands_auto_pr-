@@ -98,23 +98,30 @@ jobs:
           fi
           
           # Run OpenHands review and save output
-          echo "before openhands"
-
-          review_output=$(python -m openhands.core.main \
+          # Use timeout to prevent hanging and redirect stderr to stdout to capture everything
+          review_output=$(timeout 300s python -m openhands.core.main \
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
             --eval-output-dir ./eval_output \
             --no-auto-continue \
+            --no-interactive \
             -i 50 \
             -b 50 \
-            --eval-n-limit 50)
-          echo "hi"
+            --eval-n-limit 50 2>&1 || true)
+          
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
-          echo "hiiii"
-          # Extract just the GOOD/BAD from the output
-          result=$(echo "$review_output" | grep -o "GOOD\|BAD" || echo "BAD")
+          
+          # Debug: Show the full output
+          echo "Full OpenHands output:"
+          echo "$review_output"
+          echo "---"
+          
+          # Get the last line of output and check if it's GOOD or BAD
+          result=$(echo "$review_output" | tail -n1 | grep -E '^(GOOD|BAD)$' || echo "BAD")
+          echo "Extracted result: $result"
+          
           echo "OpenHands result: $result"
-          echo "Helloooooooooo"
+          
           if [ "$result" = "GOOD" ]; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
@@ -147,7 +154,8 @@ jobs:
           fi
           
           # If we get here, all automated checks passed, now check OpenHands result
-          OPENHANDS_RESULT=$(cat openhands_output.txt | grep -o "GOOD\|BAD" || echo "BAD")
+          # Get the last line of output and check if it's GOOD or BAD
+          OPENHANDS_RESULT=$(cat openhands_output.txt | tail -n1 | grep -E '^(GOOD|BAD)$' || echo "BAD")
           echo "Final OpenHands result: $OPENHANDS_RESULT"
           
           if [ "$OPENHANDS_RESULT" = "GOOD" ]; then
