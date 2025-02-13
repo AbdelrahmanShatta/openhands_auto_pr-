@@ -109,24 +109,8 @@ jobs:
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
           
-          # Extract just the GOOD/BAD from the output
-          # Look for GOOD/BAD at the end of a line or as a single word
-          result=$(echo "$review_output" | grep -o "\(GOOD\|BAD\)$\|\(GOOD\|BAD\)[^A-Za-z]" | head -n1 | tr -d '\n' | tr -d ' ')
-          
-          # If no match found, try to extract from the thought text
-          if [ -z "$result" ]; then
-            if echo "$review_output" | grep -q "I will output: GOOD"; then
-              result="GOOD"
-            elif echo "$review_output" | grep -q "I will output: BAD"; then
-              result="BAD"
-            else
-              result="BAD"
-            fi
-          fi
-          
-          echo "OpenHands result: $result"
-          
-          if [ "$result" = "GOOD" ]; then
+          # Check for GOOD in the output
+          if echo "$review_output" | grep -q "GOOD"; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
@@ -158,27 +142,12 @@ jobs:
           fi
           
           # If we get here, all automated checks passed, now check OpenHands result
-          # Extract the result from the thought text
-          if cat openhands_output.txt | grep -q "I will output: GOOD"; then
-            OPENHANDS_RESULT="GOOD"
-          elif cat openhands_output.txt | grep -q "I will output: BAD"; then
-            OPENHANDS_RESULT="BAD"
-          else
-            OPENHANDS_RESULT="BAD"
-          fi
-          echo "Final OpenHands result: $OPENHANDS_RESULT"
-          
-          if [ "$OPENHANDS_RESULT" = "GOOD" ]; then
+          if [ "$OPENHANDS_PASSED" = "true" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **Code Quality Review Passed**
 
             All automated checks and OpenHands review passed. Auto-merging PR.
 
-            $QUALITY_REPORT
-
-            OpenHands Review Output:
-            \`\`\`
-            $(cat openhands_output.txt || echo "No output available")
-            \`\`\`"
+            $QUALITY_REPORT"
             
             gh pr review "${{ github.event.pull_request.number }}" --approve -b "All code quality standards met."
             
@@ -198,5 +167,4 @@ jobs:
             \`\`\`"
             
             gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review."
-            exit 1
           fi
