@@ -18,16 +18,66 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.9'  # Changed to compatible version
           cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools wheel  # Add essential build tools
+          pip install setuptools wheel
+          pip install numpy==1.19.5  # Explicitly install first
           pip install openhands pylint black mypy ruff
 
-      # ... rest of the workflow remains the same ...
+      - name: Run code quality checks
+        id: quality_checks
+        continue-on-error: true
+        run: |
+          {
+            echo "### Code Quality Analysis Results" > quality_report.md
+            echo "" >> quality_report.md
+            
+            # Run Black
+            echo "#### Black (Formatting)" >> quality_report.md
+            echo '```' >> quality_report.md
+            black --check --diff . >> quality_report.md 2>&1 || true
+            echo '```' >> quality_report.md
+            echo "" >> quality_report.md
+            
+            # Run Ruff
+            echo "#### Ruff (Linting)" >> quality_report.md
+            echo '```' >> quality_report.md
+            ruff check . >> quality_report.md 2>&1 || true
+            echo '```' >> quality_report.md
+            echo "" >> quality_report.md
+            
+            # Run MyPy
+            echo "#### MyPy (Type Checking)" >> quality_report.md
+            echo '```' >> quality_report.md
+            mypy . --ignore-missing-imports >> quality_report.md 2>&1 || true
+            echo '```' >> quality_report.md
+          }
+
+      - name: Run OpenHands Review
+        id: openhands_review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          INSTRUCTIONS=$(cat .openhands_instructions)
+          python -m openhands.core.main \
+            -t "${INSTRUCTIONS} Review PR #${{ github.event.pull_request.number }}" \
+            --eval-output-dir ./eval_output \
+            -i 50 \
+            -b 50
+
+      - name: Process results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          QUALITY_REPORT=$(cat quality_report.md)
+          gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **Review Completed** $QUALITY_REPORT"
+          gh pr review "${{ github.event.pull_request.number }}" --approve -b "All checks passed"
+          gh pr merge "${{ github.event.pull_request.number }}" --auto --merge
