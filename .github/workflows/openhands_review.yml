@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install openhands-ai black mypy ruff
+          pip install openhands-ai pylint black mypy ruff
 
       - name: Run code quality checks
         id: quality_checks
@@ -37,7 +37,7 @@ jobs:
           {
             echo "### Code Quality Analysis Results" > quality_report.md
             echo "" >> quality_report.md
-
+            
             # Run Black for code formatting
             echo "#### Black (Code Formatting)" >> quality_report.md
             echo '```' >> quality_report.md
@@ -51,7 +51,7 @@ jobs:
             fi
             echo '```' >> quality_report.md
             echo "" >> quality_report.md
-
+            
             # Run Ruff for fast Python linting
             echo "#### Ruff (Fast Python Linter)" >> quality_report.md
             echo '```' >> quality_report.md
@@ -65,7 +65,7 @@ jobs:
             fi
             echo '```' >> quality_report.md
             echo "" >> quality_report.md
-
+            
             # Run MyPy for type checking
             echo "#### MyPy (Type Checking)" >> quality_report.md
             echo '```' >> quality_report.md
@@ -79,6 +79,8 @@ jobs:
             fi
             echo '```' >> quality_report.md
           } || true
+
+      # Note: .openhands_instructions file should exist in the repository root
 
       - name: Run OpenHands Review
         id: openhands_review
@@ -94,7 +96,7 @@ jobs:
             echo "Error: .openhands_instructions file not found in repository"
             exit 1
           fi
-
+          
           # Run OpenHands review and save output
           review_output=$(python -m openhands.core.main \
             -t "Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output only GOOD or BAD." \
@@ -103,13 +105,14 @@ jobs:
             -i 50 \
             -b 50 \
             --eval-n-limit 50)
-
+          
           # Save the output for debugging
           echo "$review_output" > openhands_output.txt
-
+          
           # Extract just the GOOD/BAD from the output
-          result=$(echo "$review_output" | grep -o -E "(GOOD|BAD)\$" | head -n1 | tr -d '\n' | tr -d ' ')
-
+          # Look for GOOD/BAD at the end of a line or as a single word
+          result=$(echo "$review_output" | grep -o "\(GOOD\|BAD\)$\|\(GOOD\|BAD\)[^A-Za-z]" | head -n1 | tr -d '\n' | tr -d ' ')
+          
           # If no match found, try to extract from the thought text
           if [ -z "$result" ]; then
             if echo "$review_output" | grep -q "I will output: GOOD"; then
@@ -117,13 +120,12 @@ jobs:
             elif echo "$review_output" | grep -q "I will output: BAD"; then
               result="BAD"
             else
-              echo "Warning: Could not determine GOOD/BAD result from OpenHands output.  Defaulting to BAD."
               result="BAD"
             fi
           fi
-
+          
           echo "OpenHands result: $result"
-
+          
           if [ "$result" = "GOOD" ]; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
@@ -136,13 +138,13 @@ jobs:
         run: |
           # Read the quality report
           QUALITY_REPORT=$(cat quality_report.md)
-
+          
           # Check if all automated checks passed
           CHECKS_PASSED="true"
           if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
             CHECKS_PASSED="false"
           fi
-
+          
           # If automated checks failed, don't consider OpenHands result
           if [ "$CHECKS_PASSED" = "false" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
@@ -150,16 +152,26 @@ jobs:
             Automated quality checks did not pass. Please review the report below and make necessary changes.
 
             $QUALITY_REPORT"
-
+            
             gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met. See the detailed report in the PR comments."
             exit 0
           fi
-
+          
           # If we get here, all automated checks passed, now check OpenHands result
-          if [ "$OPENHANDS_PASSED" = "true" ]; then
+          # Extract the result from the thought text
+          if cat openhands_output.txt | grep -q "I will output: GOOD"; then
+            OPENHANDS_RESULT="GOOD"
+          elif cat openhands_output.txt | grep -q "I will output: BAD"; then
+            OPENHANDS_RESULT="BAD"
+          else
+            OPENHANDS_RESULT="BAD"
+          fi
+          echo "Final OpenHands result: $OPENHANDS_RESULT"
+          
+          if [ "$OPENHANDS_RESULT" = "GOOD" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **Code Quality Review Passed**
 
-            All automated checks and OpenHands review passed.  Approving the PR.
+            All automated checks and OpenHands review passed. Auto-merging PR.
 
             $QUALITY_REPORT
 
@@ -167,19 +179,16 @@ jobs:
             \`\`\`
             $(cat openhands_output.txt || echo "No output available")
             \`\`\`"
-
+            
             gh pr review "${{ github.event.pull_request.number }}" --approve -b "All code quality standards met."
-
-            gh pr merge --auto --merge "${{ github.event.pull_request.number }}"
+            
+            # Enable auto-merge
+            gh pr merge "${{ github.event.pull_request.number }}" --auto --merge
+            gh pr merge "${{ github.event.pull_request.number }}" --merge
           else
-            # Extract suggestions from OpenHands output
-            SUGGESTIONS=$(grep -oP '(?<=Suggestions: ).*' openhands_output.txt || echo "No specific suggestions found.")
-
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
 
-            While automated checks passed, OpenHands AI review found quality issues. Please review the following suggestions:
-
-            $SUGGESTIONS
+            While automated checks passed, OpenHands AI review found quality issues. Please review your code for potential improvements.
 
             $QUALITY_REPORT
 
@@ -187,7 +196,7 @@ jobs:
             \`\`\`
             $(cat openhands_output.txt || echo "No output available")
             \`\`\`"
-
-            gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review.  See comments for suggestions."
+            
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes -b "Code quality standards not met according to OpenHands AI review."
             exit 1
           fi
