@@ -2,7 +2,7 @@ name: OpenHands Code Quality Review
 
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, synchronize, reopened]
 
 jobs:
   code-quality-review:
@@ -56,7 +56,7 @@ jobs:
             [ $? -eq 0 ] && echo "BLACK_PASSED=true" >> $GITHUB_ENV || echo "BLACK_PASSED=false" >> $GITHUB_ENV
             
             # Ruff check
-            echo "#### Ruff (Fast Python Linter)" >> quality_report.md
+            echo "#### Ruff (Linting)" >> quality_report.md
             echo '```' >> quality_report.md
             ruff check . >> quality_report.md 2>&1 || true
             [ $? -eq 0 ] && echo "RUFF_PASSED=true" >> $GITHUB_ENV || echo "RUFF_PASSED=false" >> $GITHUB_ENV
@@ -121,7 +121,7 @@ jobs:
           kill $FEED_PID
           rm "$PIPE_PATH"
 
-          # Result parsing
+          # More robust result parsing
           if grep -E "thought.*GOOD" openhands_output.log || grep -E "\[Agent Controller.*GOOD" openhands_output.log; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
@@ -138,28 +138,24 @@ jobs:
           if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
 
-Automated checks failed. Fix these first:
-$QUALITY_REPORT
-OpenHands Log: \`\`\`
-$OPENHANDS_LOG
-\`\`\`"
+            Automated checks failed. Fix these first:
+            $QUALITY_REPORT
+            OpenHands Log: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
             gh pr review "${{ github.event.pull_request.number }}" --request-changes
             exit 1
           elif [ "$OPENHANDS_PASSED" = "true" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
-$QUALITY_REPORT"
+            $QUALITY_REPORT"
             gh pr review "${{ github.event.pull_request.number }}" --approve
-            gh pr merge "${{ github.event.pull_request.number }}" --auto --merge
+            gh pr merge "${{ github.event.pull_request.number }}" --auto --merge  # Fixed line
           else
-            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
-
-While automated checks passed, OpenHands AI review found quality issues. Please review your code for potential improvements.
-
-$QUALITY_REPORT
-
-**OpenHands Review Output:**
-\`\`\`
-$OPENHANDS_LOG
-\`\`\`"
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
+            
+            $QUALITY_REPORT
+            OpenHands Findings: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
             gh pr review "${{ github.event.pull_request.number }}" --request-changes
           fi
