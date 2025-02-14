@@ -91,7 +91,7 @@ jobs:
               echo "MYPY_PASSED=false" >> $GITHUB_ENV
             fi
             echo '```' >> quality_report.md
-          } || true
+          } 
 
 
 - name: Process review results
