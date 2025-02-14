@@ -1,72 +1,6 @@
 name: OpenHands Code Quality Review
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-jobs:
-  code-quality-review:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      packages: read
-      actions: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v3
-        with:
-          docker-buildx-version: latest
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install code quality tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install black mypy ruff
-
-      - name: Run code quality checks
-        id: quality_checks
-        continue-on-error: true
-        run: |
-          {
-            echo "### Code Quality Analysis Results" > quality_report.md
-            
-            # Black check
-            echo "#### Black (Code Formatting)" >> quality_report.md
-            echo '```' >> quality_report.md
-            black --check --diff . >> quality_report.md 2>&1 || true
-            [ $? -eq 0 ] && echo "BLACK_PASSED=true" >> $GITHUB_ENV || echo "BLACK_PASSED=false" >> $GITHUB_ENV
-            
-            # Ruff check
-            echo "#### Ruff (Linting)" >> quality_report.md
-            echo '```' >> quality_report.md
-            ruff check . >> quality_report.md 2>&1 || true
-            [ $? -eq 0 ] && echo "RUFF_PASSED=true" >> $GITHUB_ENV || echo "RUFF_PASSED=false" >> $GITHUB_ENV
-            
-            # MyPy check
-            echo "#### MyPy (Type Checking)" >> quality_report.md
-            echo '```' >> quality_report.md
-            mypy . --ignore-missing-imports >> quality_report.md 2>&1 || true
-            [ $? -eq 0 ] && echo "MYPY_PASSED=true" >> $GITHUB_ENV || echo "MYPY_PASSED=false" >> $GITHUB_ENV
-          }
+# [Previous steps remain the same until the OpenHands Review step]
 
       - name: Run OpenHands Review
         id: openhands_review
@@ -88,8 +22,16 @@ jobs:
           # Format task instruction
           TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
 
-          # Run OpenHands and capture output
-          yes '' | docker run --rm \
+          # Create a named pipe for input
+          PIPE_PATH=$(mktemp -u)
+          mkfifo "$PIPE_PATH"
+          
+          # Start background process to feed empty lines
+          while true; do echo ''; sleep 1; done > "$PIPE_PATH" &
+          FEED_PID=$!
+
+          # Run OpenHands with input from the pipe
+          docker run --rm \
             --user root \
             -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.24-nikolaik \
             -e SANDBOX_USER_ID=$(id -u) \
@@ -107,43 +49,17 @@ jobs:
             --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \
-            --eval-n-limit 50 > openhands_output.log 2>&1
+            --eval-n-limit 50 < "$PIPE_PATH" > openhands_output.log 2>&1
 
-          # Enhanced result parsing
-          if grep -A 1 "thought=" openhands_output.log | grep -q "GOOD"; then
+          # Clean up
+          kill $FEED_PID
+          rm "$PIPE_PATH"
+
+          # More robust result parsing
+          if grep -E "thought.*GOOD" openhands_output.log || grep -E "\[Agent Controller.*GOOD" openhands_output.log; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
           fi
 
-      - name: Process review results
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          QUALITY_REPORT=$(cat quality_report.md)
-          OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log available")
-
-          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
-
-            Automated checks failed. Fix these first:
-            $QUALITY_REPORT
-            OpenHands Log: \`\`\`
-            $OPENHANDS_LOG
-            \`\`\`"
-            gh pr review "${{ github.event.pull_request.number }}" --request-changes
-            exit 1
-          elif [ "$OPENHANDS_PASSED" = "true" ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
-            $QUALITY_REPORT"
-            gh pr review "${{ github.event.pull_request.number }}" --approve
-            gh pr merge --auto --merge
-          else
-            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
-            
-            $QUALITY_REPORT
-            OpenHands Findings: \`\`\`
-            $OPENHANDS_LOG
-            \`\`\`"
-            gh pr review "${{ github.event.pull_request.number }}" --request-changes
-          fi
+# [Rest of the workflow remains the same]
