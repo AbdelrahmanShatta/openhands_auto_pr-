@@ -149,7 +149,7 @@ jobs:
             gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
             $QUALITY_REPORT"
             gh pr review "${{ github.event.pull_request.number }}" --approve
-            gh pr merge --auto --merge
+            gh pr merge "${{ github.event.pull_request.number }}" --auto --merge  # Fixed line
           else
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
             
