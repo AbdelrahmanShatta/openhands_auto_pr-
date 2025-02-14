@@ -1,10 +1,9 @@
 name: OpenHands Code Quality Review
-'on':
+
+on:
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
+    types: [opened, synchronize, reopened]
+
 jobs:
   code-quality-review:
     runs-on: ubuntu-latest
@@ -14,28 +13,35 @@ jobs:
       issues: write
       packages: read
       actions: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Set up Docker
         uses: docker/setup-docker-action@v3
         with:
           docker-buildx-version: latest
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
+          cache: 'pip'
+
       - name: Install code quality tools
         run: |
           python -m pip install --upgrade pip
           pip install black mypy ruff
+
       - name: Run code quality checks
         id: quality_checks
         continue-on-error: true
@@ -61,52 +67,36 @@ jobs:
             mypy . --ignore-missing-imports >> quality_report.md 2>&1 || true
             [ $? -eq 0 ] && echo "MYPY_PASSED=true" >> $GITHUB_ENV || echo "MYPY_PASSED=false" >> $GITHUB_ENV
           }
+
       - name: Run OpenHands Review
         id: openhands_review
-        if: >-
-          env.BLACK_PASSED == 'true' && env.RUFF_PASSED == 'true' &&
-          env.MYPY_PASSED == 'true'
+        if: env.BLACK_PASSED == 'true' && env.RUFF_PASSED == 'true' && env.MYPY_PASSED == 'true'
         env:
-          WORKSPACE_BASE: '${{ github.workspace }}'
-          LLM_MODEL: anthropic/claude-3-5-sonnet-20241022
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-        run: >
+          WORKSPACE_BASE: ${{ github.workspace }}
+          LLM_MODEL: "anthropic/claude-3-5-sonnet-20241022"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           # Setup environment
-
           mkdir -p ${GITHUB_WORKSPACE}/.openhands-state
-
           chmod -R 777 ${GITHUB_WORKSPACE}/.openhands-state
 
-
           # Get PR details via GitHub API
-
           PR_FILES=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files")
 
           # Format task instruction
-
-          TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }}
-          in ${{ github.repository }} according to .openhands_instructions.
-          Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
-
+          TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
 
           # Create a named pipe for input
-
           PIPE_PATH=$(mktemp -u)
-
           mkfifo "$PIPE_PATH"
-
-
+          
           # Start background process to feed empty lines
-
           while true; do echo ''; sleep 1; done > "$PIPE_PATH" &
-
           FEED_PID=$!
 
-
           # Run OpenHands with input from the pipe
-
           docker run --rm \
             --user root \
             -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.24-nikolaik \
@@ -128,32 +118,24 @@ jobs:
             --eval-n-limit 50 < "$PIPE_PATH" > openhands_output.log 2>&1
 
           # Clean up
-
           kill $FEED_PID
-
           rm "$PIPE_PATH"
 
-
           # More robust result parsing
-
-          if grep -E "thought.*GOOD" openhands_output.log || grep -E "\[Agent
-          Controller.*GOOD" openhands_output.log; then
+          if grep -E "thought.*GOOD" openhands_output.log || grep -E "\[Agent Controller.*GOOD" openhands_output.log; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
           fi
+
       - name: Process review results
         env:
-          GH_TOKEN: '${{ github.token }}'
-        run: >
+          GH_TOKEN: ${{ github.token }}
+        run: |
           QUALITY_REPORT=$(cat quality_report.md)
+          OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log available")
 
-          OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log
-          available")
-
-
-          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [
-          "$MYPY_PASSED" != "true" ]; then
+          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
 
             Automated checks failed. Fix these first:
