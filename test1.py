@@ -7,7 +7,7 @@ then calculates and displays their sum.
 
 
 def get_number(prompt):
-    """Prompt the user for an integer input, validating the input."""
+    """Prompt the user for an integer input, validating the input before inseration."""
     while True:
         try:
             return int(input(prompt))
