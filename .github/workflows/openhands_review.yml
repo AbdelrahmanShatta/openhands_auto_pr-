@@ -88,7 +88,7 @@ jobs:
           # Format task instruction
           TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
 
-          # Run OpenHands with valid arguments. Use 'yes' to feed empty input lines.
+          # Run OpenHands and capture output
           yes '' | docker run --rm \
             --user root \
             -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.24-nikolaik \
@@ -107,10 +107,10 @@ jobs:
             --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \
-            --eval-n-limit 50 > openhands_output.log
+            --eval-n-limit 50 > openhands_output.log 2>&1
 
-          # Strict result parsing
-          if grep -qx "GOOD" openhands_output.log; then
+          # Enhanced result parsing
+          if grep -A 1 "thought=" openhands_output.log | grep -q "GOOD"; then
             echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
           else
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
