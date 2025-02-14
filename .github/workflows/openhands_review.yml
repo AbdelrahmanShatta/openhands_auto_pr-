@@ -1,6 +1,72 @@
 name: OpenHands Code Quality Review
 
-# [Previous steps remain the same until the OpenHands Review step]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  code-quality-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      packages: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v3
+        with:
+          docker-buildx-version: latest
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install code quality tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black mypy ruff
+
+      - name: Run code quality checks
+        id: quality_checks
+        continue-on-error: true
+        run: |
+          {
+            echo "### Code Quality Analysis Results" > quality_report.md
+            
+            # Black check
+            echo "#### Black (Code Formatting)" >> quality_report.md
+            echo '```' >> quality_report.md
+            black --check --diff . >> quality_report.md 2>&1 || true
+            [ $? -eq 0 ] && echo "BLACK_PASSED=true" >> $GITHUB_ENV || echo "BLACK_PASSED=false" >> $GITHUB_ENV
+            
+            # Ruff check
+            echo "#### Ruff (Linting)" >> quality_report.md
+            echo '```' >> quality_report.md
+            ruff check . >> quality_report.md 2>&1 || true
+            [ $? -eq 0 ] && echo "RUFF_PASSED=true" >> $GITHUB_ENV || echo "RUFF_PASSED=false" >> $GITHUB_ENV
+            
+            # MyPy check
+            echo "#### MyPy (Type Checking)" >> quality_report.md
+            echo '```' >> quality_report.md
+            mypy . --ignore-missing-imports >> quality_report.md 2>&1 || true
+            [ $? -eq 0 ] && echo "MYPY_PASSED=true" >> $GITHUB_ENV || echo "MYPY_PASSED=false" >> $GITHUB_ENV
+          }
 
       - name: Run OpenHands Review
         id: openhands_review
@@ -62,4 +128,34 @@ name: OpenHands Code Quality Review
             echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
           fi
 
-# [Rest of the workflow remains the same]
+      - name: Process review results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          QUALITY_REPORT=$(cat quality_report.md)
+          OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log available")
+
+          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
+
+            Automated checks failed. Fix these first:
+            $QUALITY_REPORT
+            OpenHands Log: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes
+            exit 1
+          elif [ "$OPENHANDS_PASSED" = "true" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
+            $QUALITY_REPORT"
+            gh pr review "${{ github.event.pull_request.number }}" --approve
+            gh pr merge --auto --merge
+          else
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
+            
+            $QUALITY_REPORT
+            OpenHands Findings: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes
+          fi
