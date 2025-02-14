@@ -80,14 +80,15 @@ jobs:
           mkdir -p ${GITHUB_WORKSPACE}/.openhands-state
           chmod -R 777 ${GITHUB_WORKSPACE}/.openhands-state
 
-          # Get PR details
+          # Get PR details via GitHub API
           PR_FILES=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files")
 
+          # Format task instruction
           TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
 
-          # Run OpenHands in CI mode
+          # Run OpenHands with valid arguments
           docker run --rm \
             --user root \
             -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.24-nikolaik \
@@ -103,9 +104,8 @@ jobs:
             docker.all-hands.dev/all-hands-ai/openhands:0.24 \
             python -m openhands.core.main \
             -t "$TASK_INSTRUCTION" \
-            --non-interactive \
-            --eval-output-dir ./eval_output \
             --no-auto-continue \
+            --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \
             --eval-n-limit 50 > openhands_output.log
