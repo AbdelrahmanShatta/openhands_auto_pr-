@@ -66,7 +66,7 @@ jobs:
             echo '```' >> quality_report.md
             mypy . --ignore-missing-imports >> quality_report.md 2>&1 || true
             [ $? -eq 0 ] && echo "MYPY_PASSED=true" >> $GITHUB_ENV || echo "MYPY_PASSED=false" >> $GITHUB_ENV
-          }
+          } || true
 
       - name: Run OpenHands Review
         id: openhands_review
