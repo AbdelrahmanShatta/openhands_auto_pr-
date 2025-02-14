@@ -88,8 +88,8 @@ jobs:
           # Format task instruction
           TASK_INSTRUCTION="Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} according to .openhands_instructions. Output EXACTLY 'GOOD' or 'BAD'. PR changes: $PR_FILES"
 
-          # Run OpenHands with valid arguments and redirect input from /dev/null
-          docker run --rm \
+          # Run OpenHands with valid arguments. Use 'yes' to feed empty input lines.
+          yes '' | docker run --rm \
             --user root \
             -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.24-nikolaik \
             -e SANDBOX_USER_ID=$(id -u) \
@@ -108,43 +108,43 @@ jobs:
             --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \
-            --eval-n-limit 50 < /dev/null > openhands_output.log
+            --eval-n-limit 50 > openhands_output.log
 
-      #     # Strict result parsing
-      #     if grep -qx "GOOD" openhands_output.log; then
-      #       echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
-      #     else
-      #       echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
-      #     fi
+          # Strict result parsing
+          if grep -qx "GOOD" openhands_output.log; then
+            echo "OPENHANDS_PASSED=true" >> $GITHUB_ENV
+          else
+            echo "OPENHANDS_PASSED=false" >> $GITHUB_ENV
+          fi
 
-      # - name: Process review results
-      #   env:
-      #     GH_TOKEN: ${{ github.token }}
-      #   run: |
-      #     QUALITY_REPORT=$(cat quality_report.md)
-      #     OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log available")
+      - name: Process review results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          QUALITY_REPORT=$(cat quality_report.md)
+          OPENHANDS_LOG=$(cat openhands_output.log || echo "No OpenHands log available")
 
-      #     if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
-      #       gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
+          if [ "$BLACK_PASSED" != "true" ] || [ "$RUFF_PASSED" != "true" ] || [ "$MYPY_PASSED" != "true" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **Code Quality Review Failed**
 
-      #       Automated checks failed. Fix these first:
-      #       $QUALITY_REPORT
-      #       OpenHands Log: \`\`\`
-      #       $OPENHANDS_LOG
-      #       \`\`\`"
-      #       gh pr review "${{ github.event.pull_request.number }}" --request-changes
-      #       exit 1
-      #     elif [ "$OPENHANDS_PASSED" = "true" ]; then
-      #       gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
-      #       $QUALITY_REPORT"
-      #       gh pr review "${{ github.event.pull_request.number }}" --approve
-      #       gh pr merge --auto --merge
-      #     else
-      #       gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
+            Automated checks failed. Fix these first:
+            $QUALITY_REPORT
+            OpenHands Log: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes
+            exit 1
+          elif [ "$OPENHANDS_PASSED" = "true" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body "✅ **All Checks Passed**
+            $QUALITY_REPORT"
+            gh pr review "${{ github.event.pull_request.number }}" --approve
+            gh pr merge --auto --merge
+          else
+            gh pr comment "${{ github.event.pull_request.number }}" --body "❌ **OpenHands Review Failed**
             
-      #       $QUALITY_REPORT
-      #       OpenHands Findings: \`\`\`
-      #       $OPENHANDS_LOG
-      #       \`\`\`"
-      #       gh pr review "${{ github.event.pull_request.number }}" --request-changes
-      #     fi
+            $QUALITY_REPORT
+            OpenHands Findings: \`\`\`
+            $OPENHANDS_LOG
+            \`\`\`"
+            gh pr review "${{ github.event.pull_request.number }}" --request-changes
+          fi
