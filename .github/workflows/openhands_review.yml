@@ -104,7 +104,6 @@ jobs:
             docker.all-hands.dev/all-hands-ai/openhands:0.24 \
             python -m openhands.core.main \
             -t "$TASK_INSTRUCTION" \
-            --no-auto-continue \
             --eval-output-dir ./eval_output \
             -i 50 \
             -b 50 \
