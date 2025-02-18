@@ -117,7 +117,7 @@ jobs:
           PAT_USERNAME: ${{ secrets.PAT_USERNAME }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          required_vars=("LLM_API_KEY")
+          required_vars=("LLM_API_KEY" "LLM_MODEL")
           for var in "${required_vars[@]}"; do
             if [ -z "${!var}" ]; then
               echo "Error: Required environment variable $var is not set."
@@ -136,6 +136,13 @@ jobs:
           fi
       - name: Set environment variables
         run: |
+          # Explicitly set LLM_MODEL from inputs or secrets to ensure it's available
+          if [ -n "${{ secrets.LLM_MODEL }}" ]; then
+            echo "LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
+          else
+            echo "LLM_MODEL=${{ inputs.LLM_MODEL }}" >> $GITHUB_ENV
+          fi
+          
           # Handle pull request events first
           if [ -n "${{ github.event.pull_request.number }}" ]; then
             echo "ISSUE_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
@@ -212,11 +219,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
           GITHUB_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
-          LLM_MODEL: ${{ secrets.LLM_MODEL || inputs.LLM_MODEL }}
+          LLM_MODEL: ${{ env.LLM_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           PYTHONPATH: ""
         run: |
+          echo "Using LLM model: $LLM_MODEL"
           cd /tmp && python -m openhands.resolver.resolve_issue \
             --repo ${{ github.repository }} \
             --issue-number ${{ env.ISSUE_NUMBER }} \
@@ -245,7 +253,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
           GITHUB_USERNAME: ${{ secrets.PAT_USERNAME || 'openhands-agent' }}
-          LLM_MODEL: ${{ secrets.LLM_MODEL || inputs.LLM_MODEL }}
+          LLM_MODEL: ${{ env.LLM_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           PYTHONPATH: ""
